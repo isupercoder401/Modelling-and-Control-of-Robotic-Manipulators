@@ -1,14 +1,15 @@
 # arduinobot_description
 
-The robot model of **Arduinobot**, a robotic arm with a rotating base, two arm joints and a two-finger gripper. It is described in URDF/Xacro with STL meshes. A launch file shows it in RViz.
+The robot model of **Arduinobot**, a robotic arm with a rotating base, two arm joints and a two-finger gripper. It is described in URDF/Xacro with STL meshes. One launch file shows it in RViz, and another simulates it in Gazebo.
 
 ## Contents
 
 ```
 arduinobot_description/
-├── urdf/arduinobot.urdf.xacro   # robot model (links, joints, limits)
-├── meshes/*.STL                 # 3D parts used as visual geometry
+├── urdf/arduinobot.urdf.xacro   # robot model (links, joints, limits, collision, inertia)
+├── meshes/*.STL                 # 3D parts used for visual and collision geometry
 ├── launch/display.launch.py     # starts robot_state_publisher + joint sliders + RViz
+├── launch/gazebo.launch.py      # Gazebo simulation
 └── rviz/display.rviz            # saved RViz configuration
 ```
 
@@ -36,6 +37,40 @@ The URDF is written with **Xacro** (XML macros), which lets the file use variabl
 | `velocity` | `10.0` | max joint velocity |
 
 The meshes are scaled by `0.01` in each axis.
+
+### Visual, collision and inertial
+
+Every link with geometry has three parts:
+
+| Tag | Used by | In this model |
+|---|---|---|
+| `<visual>` | RViz, Gazebo (what you **see**) | STL mesh of the part |
+| `<collision>` | Gazebo, MoveIt (what can **hit** things) | An exact copy of the visual: the same mesh, origin and scale |
+| `<inertial>` | Gazebo physics (how the link **moves**) | Created by the `default_inertial` macro |
+
+The `default_inertial` macro takes the link's mass in **kilograms**:
+
+```xml
+<xacro:macro name="default_inertial" params="mass">
+    <inertial>
+        <mass value="${mass}"/>
+        <inertia ixx="1.0" ixy="0.0" ixz="0.0" iyy="1.0" iyz="0.0" izz="1.0"/>
+    </inertial>
+</xacro:macro>
+
+<xacro:default_inertial mass="0.1"/>   <!-- used inside a link -->
+```
+
+| Link | Mass (kg) |
+|---|---|
+| `base_link` | 1.0 |
+| `base_plate`, `forward_drive_arm`, `horizontal_arm` | 0.1 |
+| `claw_support` | 0.05 |
+| `gripper_right`, `gripper_left`, `rgb_camera` | 0.01 |
+
+> The inertia values (`1.0` kg·m²) are placeholders. Real values for parts this small would be much smaller. RViz ignores inertia; only the physics simulation uses it.
+
+To see the collision shapes in RViz, open **RobotModel** and tick **Collision Enabled**.
 
 ### Joints
 
@@ -103,6 +138,63 @@ ros2 topic echo /joint_states
 ros2 run tf2_tools view_frames      # saves frames.pdf with the TF tree
 ```
 
+## Gazebo simulation
+
+[`gazebo.launch.py`](launch/gazebo.launch.py) will run the robot in **Gazebo Harmonic**, the simulator used with ROS 2 Jazzy. It talks to ROS through the `ros_gz` packages.
+
+> **Status:** working. Gazebo starts, and the robot spawns in an empty world. The joints aren't controlled yet, so the arm falls under gravity.
+
+### What each part does
+
+| Action | Package / executable | Purpose |
+|---|---|---|
+| `model` argument | – | Path to the Xacro file (the same default as `display.launch.py`) |
+| `SetEnvironmentVariable` | – | Adds the parent of the package's `share/` folder to Gazebo's resource path, so `package://arduinobot_description/meshes/...` can be found |
+| `robot_state_publisher` | `robot_state_publisher` | Publishes `/robot_description` and TF. `use_sim_time: True` makes it follow Gazebo's clock |
+| `gazebo` (included launch) | `ros_gz_sim` → `gz_sim.launch.py` | Starts Gazebo with `gz_args: -v 4 -r empty.sdf` (verbose logs, start running, empty world) |
+| `gz_spwan_entity` | `ros_gz_sim` → `create` | Spawns the robot in Gazebo from the `robot_description` topic, with the name `arduinobot` |
+| `gz_ros2_bridge` | `ros_gz_bridge` → `parameter_bridge` | Bridges Gazebo's `/clock` to ROS (`rosgraph_msgs/msg/Clock`) so ROS nodes can use simulation time |
+
+```
+                    robot_description
+robot_state_publisher ───────────────▶ create (spawns the robot) ──▶ Gazebo
+          ▲                                                           │
+          └────────────── /clock ◀── parameter_bridge ◀───────────────┘
+```
+
+### Ways of building paths used in this file
+
+| Code | Result |
+|---|---|
+| `get_package_share_directory('arduinobot_description')` | `install/arduinobot_description/share/arduinobot_description` |
+| `os.path.join(dir, "urdf", "arduinobot.urdf.xacro")` | A file inside that folder |
+| `Path(dir).parent.resolve()` | The folder one level up (`.../share`), as an absolute path |
+| `[path, "/file.launch.py"]` (a list) | Joined together by the launch system when the launch starts. A list can also contain values like `LaunchConfiguration` |
+
+### Fixes made to get it running
+
+- [x] Return the actions: `LaunchDescription([model_Arg, gazebo_resource_path, robot_state_publisher, gazebo, gz_spwan_entity, gz_ros2_bridge])`
+- [x] Fix the included file path: `os.path.join(get_package_share_directory('ros_gz_sim'), 'launch', 'gz_sim.launch.py')`
+- [x] Rename the environment variable to `GZ_SIM_RESOURCE_PATH`, which is what Gazebo Harmonic reads
+- [x] Fix the spawn arguments to `["-topic", "robot_description", "-name", "arduinobot"]` (no trailing space after `-topic`, and `-name` needs its dash)
+
+Run it with:
+
+```bash
+ros2 launch arduinobot_description gazebo.launch.py
+```
+
 ## Dependencies
 
-At runtime this package uses `xacro`, `robot_state_publisher`, `joint_state_publisher_gui`, `rviz2` and `ros2launch`.
+Declared as `<exec_depend>` in [`package.xml`](package.xml):
+
+| Package | Used for |
+|---|---|
+| `xacro` | Turning the `.urdf.xacro` file into URDF |
+| `urdf` | URDF parsing |
+| `robot_state_publisher` | Publishing the robot description and TF |
+| `joint_state_publisher_gui` | Joint sliders in `display.launch.py` |
+| `rviz2` | Visualisation |
+| `ros2launch` | `ros2 launch` |
+| `ros_gz_sim` | Starting Gazebo and spawning the robot |
+| `ros_gz_bridge` | Bridging topics between Gazebo and ROS |

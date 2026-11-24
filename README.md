@@ -28,7 +28,7 @@ arduinobot_ws/
 |---|---|---|---|
 | `arduinobot_py_examples` | `ament_python` | Nodes, topics (pub/sub), timers, parameters and parameter callbacks | [README](src/arduinobot_py_examples/README.md) |
 | `arduinobot_cpp_examples` | `ament_cmake` | C++ versions of the Python examples (not written yet) | [README](src/arduinobot_cpp_examples/README.md) |
-| `arduinobot_description` | `ament_cmake` | Robot modelling with URDF/Xacro, meshes, `robot_state_publisher`, `joint_state_publisher_gui`, RViz, launch files | [README](src/arduinobot_description/README.md) |
+| `arduinobot_description` | `ament_cmake` | Robot modelling with URDF/Xacro (visual, collision, inertial), meshes, RViz visualisation, Gazebo simulation, launch files | [README](src/arduinobot_description/README.md) |
 
 ## Getting started
 
@@ -41,8 +41,11 @@ sudo apt install python3-colcon-common-extensions \
                  ros-jazzy-xacro \
                  ros-jazzy-robot-state-publisher \
                  ros-jazzy-joint-state-publisher-gui \
-                 ros-jazzy-rviz2
+                 ros-jazzy-rviz2 \
+                 ros-jazzy-ros-gz
 ```
+
+`ros-jazzy-ros-gz` installs Gazebo Harmonic and the ROS–Gazebo bridge packages (`ros_gz_sim`, `ros_gz_bridge`).
 
 ### 2. Clone and build
 
@@ -68,6 +71,9 @@ ros2 run arduinobot_py_examples simple_subscriber
 
 # Show the robot arm in RViz, with sliders to move each joint
 ros2 launch arduinobot_description display.launch.py
+
+# Simulate the robot in Gazebo
+ros2 launch arduinobot_description gazebo.launch.py
 ```
 
 Each package README has more details and examples.
@@ -79,6 +85,8 @@ Each package README has more details and examples.
 - [x] Declare parameters and react to parameter changes
 - [x] Describe a robot with URDF/Xacro and meshes
 - [x] Show the robot in RViz with a launch file
+- [x] Add collision geometry and inertial properties (mass and inertia) to every link
+- [x] Spawn the robot in Gazebo with `ros_gz`
 - [ ] Write the C++ examples
 - [ ] _Next topics…_
 
