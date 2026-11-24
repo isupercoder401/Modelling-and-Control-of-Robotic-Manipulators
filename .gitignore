@@ -1,0 +1,16 @@
+# colcon build output
+build/
+install/
+log/
+
+# Editor / IDE (VS Code's C++ index alone is >1 GB)
+.vscode/
+.idea/
+
+# Python
+__pycache__/
+*.pyc
+*.egg-info/
+
+# OS
+.DS_Store
